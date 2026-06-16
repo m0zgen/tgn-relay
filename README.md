@@ -14,6 +14,7 @@ It is designed for cases where direct access to `https://api.telegram.org` is bl
 - JSON and form-urlencoded requests
 - `/healthz` endpoint
 - Caddy and systemd examples
+- Using native Telegram API, no external dependencies
 
 ## API
 
