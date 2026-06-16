@@ -215,5 +215,5 @@ Example:
 
 ## Credits
 
-- OpenBLD.net team for inspiration and testing
+- [OpenBLD.net](https://openbld.net) team for inspiration and testing
 - Go standard library and open-source ecosystem for making this possible
