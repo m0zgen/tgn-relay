@@ -1,0 +1,28 @@
+listen: ":8080"
+
+telegram:
+  api_url: "https://api.telegram.org"
+  timeout: "7s"
+
+security:
+  relay_keys:
+    - "change-me-super-secret"
+  # Empty allow_ips means allow all. When Caddy is local, use 127.0.0.1/32.
+  allow_ips: []
+  direct_mode_enabled: false
+  max_text_bytes: 4096
+
+groups:
+  monitoring:
+    token: "123456:ABCDEF"
+    chat_id: "-1001234567890"
+    parse_mode: "HTML"
+    disable_web_page_preview: true
+    disable_notification: false
+
+  sysconf:
+    token: "987654:ZYXWV"
+    chat_id: "-1009876543210"
+    parse_mode: "HTML"
+    disable_web_page_preview: true
+    disable_notification: false
