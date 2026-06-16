@@ -1,4 +1,5 @@
 bin/
+dist/
 config.yml
 *.log
 .DS_Store
