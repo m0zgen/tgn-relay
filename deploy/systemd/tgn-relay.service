@@ -1,0 +1,20 @@
+[Unit]
+Description=tgn-relay Telegram notification gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tgn-relay
+Group=tgn-relay
+ExecStart=/usr/local/bin/tgn-relay -config /etc/tgn-relay/config.yml
+Restart=on-failure
+RestartSec=3s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/tgn-relay
+
+[Install]
+WantedBy=multi-user.target
