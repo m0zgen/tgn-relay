@@ -128,6 +128,8 @@ journalctl -u tgn-relay -f
 - Do not expose this service without `X-Relay-Key` or a network allowlist.
 - If you previously used a transparent proxy with `/bot<TOKEN>/sendMessage`, rotate exposed Telegram tokens.
 
+---
+
 ## HTML Messages
 
 Alert examples:
