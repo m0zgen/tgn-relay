@@ -11,10 +11,28 @@ LDFLAGS := -s -w \
 	-X $(PKG_VERSION).Commit=$(COMMIT) \
 	-X $(PKG_VERSION).Date=$(DATE)
 
-.PHONY: build run test tidy clean snapshot check-release release status
+BIN_DIR := bin
+
+.PHONY: build build-linux build-linux-amd64 build-linux-arm64 build-all run test tidy clean snapshot check-release release status
 
 build:
-	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o bin/$(APP) ./cmd/$(APP)
+	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(APP) ./cmd/$(APP)
+
+build-linux: build-linux-amd64 build-linux-arm64
+
+build-linux-amd64:
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build \
+		-ldflags "$(LDFLAGS)" \
+		-o $(BIN_DIR)/linux/amd64/$(APP) \
+		./cmd/$(APP)
+
+build-linux-arm64:
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build \
+		-ldflags "$(LDFLAGS)" \
+		-o $(BIN_DIR)/linux/arm64/$(APP) \
+		./cmd/$(APP)
+
+build-all: build build-linux
 
 run:
 	go run ./cmd/$(APP) -config configs/config.example.yml
@@ -63,4 +81,3 @@ release:
 		exit 1; \
 	fi
 	./tools/release.sh $(VERSION)
-	
