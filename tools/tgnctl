@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# tgnctl - simple CLI wrapper for tgn-relay
+# Author: Yevgeniy Goncharov / OpenBLD.net
+
+set -euo pipefail
+
+CONFIG_FILE="${TGNCTL_CONFIG:-/etc/tgnctl.conf}"
+
+# Defaults
+TGN_RELAY_URL="${TGN_RELAY_URL:-http://127.0.0.1:8080}"
+TGN_RELAY_KEY="${TGN_RELAY_KEY:-}"
+TGN_PARSE_MODE="${TGN_PARSE_MODE:-HTML}"
+
+if [[ -f "$CONFIG_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$CONFIG_FILE"
+fi
+
+usage() {
+  cat <<EOF
+Usage:
+  tgnctl send <group> <text>
+  tgnctl send-html <group> <html-text>
+
+Examples:
+  tgnctl send monitoring "nginx stopped on ada.openbld.net"
+  tgnctl send-html monitoring "<b>🚨 Service stopped</b>"
+
+Environment / config:
+  TGN_RELAY_URL   default: http://127.0.0.1:8080
+  TGN_RELAY_KEY   relay secret key
+  TGN_PARSE_MODE  default: HTML
+
+Config file:
+  /etc/tgnctl.conf
+EOF
+}
+
+die() {
+  echo "tgnctl: $*" >&2
+  exit 1
+}
+
+need_cmd() {
+  command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
+}
+
+send_message() {
+  local group="$1"
+  local parse_mode="$2"
+  local text="$3"
+
+  [[ -n "$group" ]] || die "group is empty"
+  [[ -n "$text" ]] || die "text is empty"
+  [[ -n "$TGN_RELAY_KEY" ]] || die "TGN_RELAY_KEY is empty"
+
+  need_cmd curl
+  need_cmd jq
+
+  local payload
+  payload="$(
+    jq -n \
+      --arg group "$group" \
+      --arg parse_mode "$parse_mode" \
+      --arg text "$text" \
+      '{
+        group: $group,
+        parse_mode: $parse_mode,
+        text: $text
+      }'
+  )"
+
+  curl -fsS -X POST "${TGN_RELAY_URL%/}/api/v1/send" \
+    -H "X-Relay-Key: ${TGN_RELAY_KEY}" \
+    -H "Content-Type: application/json" \
+    -d "$payload" >/dev/null
+
+  echo "sent"
+}
+
+cmd="${1:-}"
+
+case "$cmd" in
+  send)
+    shift
+    [[ $# -ge 2 ]] || {
+      usage
+      exit 2
+    }
+
+    group="$1"
+    shift
+
+    text="$*"
+    send_message "$group" "$TGN_PARSE_MODE" "$text"
+    ;;
+
+  send-html)
+    shift
+    [[ $# -ge 2 ]] || {
+      usage
+      exit 2
+    }
+
+    group="$1"
+    shift
+
+    text="$*"
+    send_message "$group" "HTML" "$text"
+    ;;
+
+  -h|--help|help|"")
+    usage
+    ;;
+
+  *)
+    die "unknown command: $cmd"
+    ;;
+esac
