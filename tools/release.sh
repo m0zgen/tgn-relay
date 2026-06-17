@@ -21,9 +21,30 @@ if [[ -n "$(git status --short)" ]]; then
   exit 1
 fi
 
+echo "[release] fetching tags"
+git fetch --tags --quiet
+
 if git rev-parse "$VERSION" >/dev/null 2>&1; then
-  echo "Tag already exists: $VERSION"
+  echo "Tag already exists locally: $VERSION"
   exit 1
+fi
+
+if git ls-remote --tags origin "refs/tags/$VERSION" | grep -q "$VERSION"; then
+  echo "Tag already exists on origin: $VERSION"
+  exit 1
+fi
+
+LATEST_TAG="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1 || true)"
+
+if [[ -n "$LATEST_TAG" ]]; then
+  LOWEST="$(printf '%s\n%s\n' "$LATEST_TAG" "$VERSION" | sort -V | head -n 1)"
+
+  if [[ "$LOWEST" == "$VERSION" ]]; then
+    echo "Version must be greater than latest tag."
+    echo "Latest tag: $LATEST_TAG"
+    echo "Requested:   $VERSION"
+    exit 1
+  fi
 fi
 
 echo "[release] running tests"
