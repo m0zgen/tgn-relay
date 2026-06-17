@@ -95,6 +95,28 @@ Binary:
 ./bin/tgn-relay -config configs/config.example.yml
 ```
 
+## Makefile
+
+The project includes a `Makefile` for local builds, tests, snapshot builds, and releases.
+
+### Main commands
+
+```bash
+make build
+```
+
+Build the binary for the current system - `bin/tgn-relay`.
+
+Build for Linux:
+```bash
+make build-linux
+```
+
+or for all platforms:
+```bash
+make build-all
+```
+
 ## Caddy
 
 ```caddyfile
