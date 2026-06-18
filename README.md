@@ -235,6 +235,51 @@ Example:
 <code>x &lt; y</code>
 ```
 
+## Tools
+
+`tgnctl` is a small command-line tool for sending messages through `tgn-relay`.
+
+Example config:
+
+```bash
+cat > ./tgnctl.conf <<'EOF'
+TGN_RELAY_URL="http://127.0.0.1:8080"
+TGN_RELAY_KEY="super-secret-key"
+TGN_PARSE_MODE="HTML"
+EOF
+```
+
+Testing:
+
+```bash
+TGNCTL_CONFIG=./tgnctl.conf ./tgnctl send monitoring "✅ hello from tgnctl"
+```
+
+Testing with HTML:
+
+```bash
+./tgnctl --config ./tgnctl.conf send-html monitoring "<b>✅ test</b>"
+```
+
+or:
+
+```bash
+./tgnctl -c ./tgnctl.conf send monitoring "✅ test"
+```
+
+Installation:
+
+```bash
+sudo install -m 0755 tgnctl /usr/local/bin/tgnctl
+```
+
+Use it in systemd unit for OnFailure alerting:
+
+```bash
+[Unit]
+OnFailure=tgn-notify@%n.service
+```
+
 ## Credits
 
 - [OpenBLD.net](https://openbld.net) team for inspiration and testing
