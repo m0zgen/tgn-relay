@@ -1,0 +1,15 @@
+# /etc/systemd/system/tgn-boot-notify.service
+
+[Unit]
+Description=Send boot notification
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# sleep before to 10 sec
+ExecStartPre=/bin/sleep 10
+ExecStart=/usr/local/bin/tgnctl send-html -H -I -D monitoring "<b>🔄 Server booted</b>"
+
+[Install]
+WantedBy=multi-user.target
