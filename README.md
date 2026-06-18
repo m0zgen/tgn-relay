@@ -280,6 +280,12 @@ Use it in systemd unit for OnFailure alerting:
 OnFailure=tgn-notify@%n.service
 ```
 
+Test it (example):
+
+```bash
+sudo systemctl start 'tgn-notify@nginx.service'
+```
+
 ## Credits
 
 - [OpenBLD.net](https://openbld.net) team for inspiration and testing
