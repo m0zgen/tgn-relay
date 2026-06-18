@@ -1,0 +1,8 @@
+# /etc/systemd/system/tgn-notify@.service
+
+[Unit]
+Description=Send Telegram alert for failed unit %I
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/tgnctl send-html monitoring "<b>❌ systemd unit failed</b>\n\n<b>Host:</b> <code>%H</code>\n<b>Unit:</b> <code>%I</code>\n<b>Status:</b> <code>failed</code>"
