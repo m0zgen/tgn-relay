@@ -4,7 +4,23 @@
 
 set -euo pipefail
 
-CONFIG_FILE="${TGNCTL_CONFIG:-/etc/tgnctl.conf}"
+CONFIG_FILE="${TGNCTL_CONFIG:-/etc/tgn-relay/tgnctl.conf}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -c|--config)
+      [[ $# -ge 2 ]] || {
+        echo "tgnctl: missing config path after $1" >&2
+        exit 2
+      }
+      CONFIG_FILE="$2"
+      shift 2
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
 
 # Defaults
 TGN_RELAY_URL="${TGN_RELAY_URL:-http://127.0.0.1:8080}"
@@ -32,7 +48,7 @@ Environment / config:
   TGN_PARSE_MODE  default: HTML
 
 Config file:
-  /etc/tgnctl.conf
+  /etc/tgn-relay/tgnctl.conf
 EOF
 }
 
