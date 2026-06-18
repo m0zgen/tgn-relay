@@ -139,6 +139,18 @@ detect_host_ip() {
   echo "$ipaddr"
 }
 
+decode_escapes() {
+  local s="$1"
+
+  # literal \n -> real newline
+  s="${s//\\n/$'\n'}"
+
+  # optional: literal \t -> real tab
+  s="${s//\\t/$'\t'}"
+
+  echo "$s"
+}
+
 cmd="${1:-}"
 
 case "$cmd" in
@@ -185,6 +197,7 @@ case "$cmd" in
     shift
 
     text="$*"
+    text="$(decode_escapes "$text")"
 
     if [[ "$add_host" -eq 1 || "$add_date" -eq 1 || "$add_ip" -eq 1 ]]; then
         meta=""
@@ -252,6 +265,7 @@ case "$cmd" in
     shift
 
     text="$*"
+    text="$(decode_escapes "$text")"
 
     if [[ "$add_host" -eq 1 || "$add_date" -eq 1 || "$add_ip" -eq 1 ]]; then
         meta=""
