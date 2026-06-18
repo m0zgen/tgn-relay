@@ -286,6 +286,24 @@ Test it (example):
 sudo systemctl start 'tgn-notify@nginx.service'
 ```
 
+Example - HTML with metadata:
+
+```bash
+tgnctl send-html -H -I -D monitoring "<b>🟢🚀 DNS is UP again.</b>"
+```
+
+Example - generic message with metadata:
+
+```bash
+tgnctl send -H -I -D monitoring "🟢🚀 DNS  is UP again."
+```
+
+Additional args:
+
+- `-H` - detect hostname and include it in message
+- `-D` - include current date and time in message
+- `-I` - include IP address of the host in message
+
 ## Credits
 
 - [OpenBLD.net](https://openbld.net) team for inspiration and testing
