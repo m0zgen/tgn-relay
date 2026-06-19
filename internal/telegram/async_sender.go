@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"sync/atomic"
 	"time"
+
+	"github.com/m0zgen/tgn-relay/internal/metrics"
 )
 
 var ErrQueueFull = errors.New("telegram queue is full")
@@ -46,12 +48,17 @@ func NewAsyncSender(client *Client, cfg AsyncSenderConfig, logger *slog.Logger) 
 		logger = slog.Default()
 	}
 
-	return &AsyncSender{
+	s := &AsyncSender{
 		client:   client,
 		log:      logger,
 		queue:    make(chan queueItem, cfg.QueueSize),
 		interval: cfg.Interval,
 	}
+
+	metrics.SetQueueCapacity(cap(s.queue))
+	metrics.SetQueueDepth(len(s.queue))
+
+	return s
 }
 
 // SendMessage реализует тот же интерфейс, что и обычный Client,
@@ -74,6 +81,8 @@ func (s *AsyncSender) SendMessage(ctx context.Context, token string, req SendMes
 
 	select {
 	case s.queue <- item:
+		metrics.SetQueueDepth(len(s.queue))
+
 		return &APIResponse{
 			OK:          true,
 			Description: "queued",
@@ -83,6 +92,9 @@ func (s *AsyncSender) SendMessage(ctx context.Context, token string, req SendMes
 		return nil, ctx.Err()
 
 	default:
+		metrics.IncQueueFull()
+		metrics.SetQueueDepth(len(s.queue))
+
 		return nil, ErrQueueFull
 	}
 }
@@ -100,6 +112,8 @@ func (s *AsyncSender) Run(ctx context.Context) {
 			return
 
 		case item := <-s.queue:
+			metrics.SetQueueDepth(len(s.queue))
+
 			s.waitIfPaused(ctx)
 
 			select {
@@ -146,6 +160,9 @@ func (s *AsyncSender) sendWithRetryAfter(ctx context.Context, item queueItem) {
 	for {
 		_, err := s.client.SendMessage(ctx, item.Token, item.Req)
 		if err == nil {
+			metrics.IncTelegramSent()
+			metrics.SetTelegramPausedUntil(time.Time{})
+
 			s.log.Info("telegram queued message sent", "chat_id", item.Req.ChatID, "bytes", len(item.Req.Text))
 			return
 		}
@@ -160,6 +177,10 @@ func (s *AsyncSender) sendWithRetryAfter(ctx context.Context, item queueItem) {
 			until := time.Now().Add(retryAfter)
 			s.pausedUntil.Store(until.UnixNano())
 
+			metrics.IncTelegramRateLimited()
+			metrics.SetTelegramRetryAfter(retryAfter)
+			metrics.SetTelegramPausedUntil(until)
+
 			s.log.Warn(
 				"telegram rate limited",
 				"retry_after", retryAfter.String(),
@@ -170,13 +191,39 @@ func (s *AsyncSender) sendWithRetryAfter(ctx context.Context, item queueItem) {
 			select {
 			case <-ctx.Done():
 				timer.Stop()
+				metrics.IncTelegramFailed("context_cancelled")
 				return
 			case <-timer.C:
 				continue
 			}
 		}
 
-		s.log.Error("telegram queued message failed", "chat_id", item.Req.ChatID, "error", err)
+		reason := classifySendError(err)
+		metrics.IncTelegramFailed(reason)
+
+		s.log.Error("telegram queued message failed", "chat_id", item.Req.ChatID, "reason", reason, "error", err)
 		return
 	}
+}
+
+// helper
+func classifySendError(err error) string {
+	if err == nil {
+		return "none"
+	}
+
+	if errors.Is(err, context.Canceled) {
+		return "context_cancelled"
+	}
+
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "context_deadline"
+	}
+
+	var rl *RateLimitError
+	if errors.As(err, &rl) {
+		return "rate_limited"
+	}
+
+	return "telegram_error"
 }

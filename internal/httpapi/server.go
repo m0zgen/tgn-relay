@@ -11,6 +11,7 @@ import (
 
 	"github.com/m0zgen/tgn-relay/internal/auth"
 	"github.com/m0zgen/tgn-relay/internal/config"
+	"github.com/m0zgen/tgn-relay/internal/metrics"
 	"github.com/m0zgen/tgn-relay/internal/telegram"
 )
 
@@ -48,6 +49,8 @@ func NewServer(cfg *config.Config, tg TelegramSender, logger *slog.Logger) *Serv
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.healthz)
+	mux.Handle("GET /metrics", metrics.Handler())
+
 	mux.HandleFunc("POST /api/v1/send", s.withAuth(s.sendByGroup))
 	mux.HandleFunc("POST /api/v1/direct", s.withAuth(s.direct))
 	return s.accessLog(mux)
@@ -133,6 +136,8 @@ func (s *Server) sendByGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	metrics.IncMessageEnqueued("group", req.Group)
+
 	// s.log.Info("send ok", "mode", "group", "group", req.Group, "bytes", len(req.Text))
 	// writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 	s.log.Info("send queued", "mode", "group", "group", req.Group, "bytes", len(req.Text))
@@ -178,6 +183,8 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	metrics.IncMessageEnqueued("direct", "-")
+
 	s.log.Info("send ok", "mode", "direct", "bytes", len(req.Text))
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
@@ -216,6 +223,9 @@ func (s *Server) accessLog(next http.Handler) http.Handler {
 		start := time.Now()
 		rw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rw, r)
+		
+		metrics.ObserveHTTPRequest(r.Method, r.URL.Path, rw.status, time.Since(start))
+
 		// Never log full URI: direct mode may receive token and old proxy mode had token in path.
 		s.log.Info("http request", "method", r.Method, "path", r.URL.Path, "status", rw.status, "duration_ms", time.Since(start).Milliseconds())
 	})
