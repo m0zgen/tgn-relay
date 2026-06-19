@@ -21,6 +21,8 @@ type Config struct {
 type TelegramConfig struct {
 	APIURL  string `yaml:"api_url"`
 	Timeout string `yaml:"timeout"`
+	QueueSize int    `yaml:"queue_size"`
+	SendInterval string `yaml:"send_interval"`
 }
 
 type SecurityConfig struct {
@@ -65,6 +67,12 @@ func (c *Config) setDefaults() {
 	if c.Telegram.Timeout == "" {
 		c.Telegram.Timeout = "7s"
 	}
+	if c.Telegram.QueueSize <= 0 {
+		c.Telegram.QueueSize = 1000
+	}
+	if c.Telegram.SendInterval == "" {
+		c.Telegram.SendInterval = "1s"
+	}
 	if c.Security.MaxTextBytes == 0 {
 		c.Security.MaxTextBytes = 4096
 	}
@@ -79,6 +87,9 @@ func (c *Config) Validate() error {
 	}
 	if _, err := time.ParseDuration(c.Telegram.Timeout); err != nil {
 		return fmt.Errorf("invalid telegram.timeout: %w", err)
+	}
+	if _, err := time.ParseDuration(c.Telegram.SendInterval); err != nil {
+		return fmt.Errorf("invalid telegram.send_interval: %w", err)
 	}
 	if len(c.Security.RelayKeys) == 0 {
 		return errors.New("security.relay_keys must contain at least one key")
@@ -109,6 +120,14 @@ func (t TelegramConfig) TimeoutDuration() time.Duration {
 	d, err := time.ParseDuration(t.Timeout)
 	if err != nil {
 		return 7 * time.Second
+	}
+	return d
+}
+
+func (t TelegramConfig) SendIntervalDuration() time.Duration {
+	d, err := time.ParseDuration(t.SendInterval)
+	if err != nil {
+		return time.Second
 	}
 	return d
 }
