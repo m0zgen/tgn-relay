@@ -37,7 +37,11 @@ func main() {
 	}
 
 	tg := telegram.NewClient(cfg.Telegram.APIURL, cfg.Telegram.TimeoutDuration())
-	api := httpapi.NewServer(cfg, tg, logger)
+	tgSender := telegram.NewAsyncSender(tg, telegram.AsyncSenderConfig{
+		QueueSize: 1000,
+		Interval:  time.Second,
+	}, logger)
+	api := httpapi.NewServer(cfg, tgSender, logger)
 
 	srv := &http.Server{
 		Addr:              cfg.Listen,

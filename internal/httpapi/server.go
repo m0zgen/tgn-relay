@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -118,13 +119,24 @@ func (s *Server) sendByGroup(w http.ResponseWriter, r *http.Request) {
 		DisableNotification:   silent,
 	})
 	if err != nil {
-		s.log.Error("send failed", "mode", "group", "group", req.Group, "error", err)
+		if errors.Is(err, telegram.ErrQueueFull) {
+			s.log.Error("telegram queue full", "mode", "group", "group", req.Group)
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+				"ok":    false,
+				"error": "telegram queue full",
+			})
+			return
+		}
+
+		s.log.Error("send enqueue failed", "mode", "group", "group", req.Group, "error", err)
 		writeJSON(w, http.StatusBadGateway, map[string]any{"ok": false, "error": "telegram send failed"})
 		return
 	}
 
-	s.log.Info("send ok", "mode", "group", "group", req.Group, "bytes", len(req.Text))
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	// s.log.Info("send ok", "mode", "group", "group", req.Group, "bytes", len(req.Text))
+	// writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	s.log.Info("send queued", "mode", "group", "group", req.Group, "bytes", len(req.Text))
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "queued": true})
 }
 
 func (s *Server) direct(w http.ResponseWriter, r *http.Request) {

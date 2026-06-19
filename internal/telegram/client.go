@@ -24,11 +24,27 @@ type SendMessageRequest struct {
 	DisableNotification   bool   `json:"disable_notification,omitempty"`
 }
 
+type ResponseParameters struct {
+	RetryAfter      int64 `json:"retry_after,omitempty"`
+	MigrateToChatID int64 `json:"migrate_to_chat_id,omitempty"`
+}
+
+// TG API rate limit handler
+type RateLimitError struct {
+	RetryAfter time.Duration
+	Response   *APIResponse
+}
+
+func (e *RateLimitError) Error() string {
+	return fmt.Sprintf("telegram rate limited: retry after %s", e.RetryAfter)
+}
+
 type APIResponse struct {
-	OK          bool            `json:"ok"`
-	Description string          `json:"description,omitempty"`
-	ErrorCode   int             `json:"error_code,omitempty"`
-	Result      json.RawMessage `json:"result,omitempty"`
+	OK          bool                `json:"ok"`
+	Description string              `json:"description,omitempty"`
+	ErrorCode   int                 `json:"error_code,omitempty"`
+	Parameters  *ResponseParameters `json:"parameters,omitempty"`
+	Result      json.RawMessage     `json:"result,omitempty"`
 }
 
 func NewClient(apiURL string, timeout time.Duration) *Client {
@@ -73,6 +89,20 @@ func (c *Client) SendMessage(ctx context.Context, token string, req SendMessageR
 		return nil, fmt.Errorf("telegram returned non-json status=%d body=%q", resp.StatusCode, string(limited))
 	}
 	if resp.StatusCode >= 300 || !apiResp.OK {
+		// RL handler: if status is 429 or error code is 429, treat as rate limit error
+		if resp.StatusCode == http.StatusTooManyRequests || apiResp.ErrorCode == 429 {
+			retryAfter := int64(1)
+
+			if apiResp.Parameters != nil && apiResp.Parameters.RetryAfter > 0 {
+				retryAfter = apiResp.Parameters.RetryAfter
+			}
+
+			return &apiResp, &RateLimitError{
+				RetryAfter: time.Duration(retryAfter) * time.Second,
+				Response:   &apiResp,
+			}
+		}
+
 		if apiResp.Description == "" {
 			apiResp.Description = http.StatusText(resp.StatusCode)
 		}
