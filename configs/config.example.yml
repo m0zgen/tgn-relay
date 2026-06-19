@@ -3,6 +3,9 @@ listen: ":8080"
 telegram:
   api_url: "https://api.telegram.org"
   timeout: "7s"
+  # Async sender configuration
+  queue_size: 1000
+  send_interval: 1s
 
 security:
   relay_keys:
@@ -26,3 +29,4 @@ groups:
     parse_mode: "HTML"
     disable_web_page_preview: true
     disable_notification: false
+  
