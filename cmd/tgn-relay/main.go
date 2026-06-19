@@ -36,11 +36,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	// root app context
+	appCtx, appCancel := context.WithCancel(context.Background())
+	defer appCancel()
+
 	tg := telegram.NewClient(cfg.Telegram.APIURL, cfg.Telegram.TimeoutDuration())
 	tgSender := telegram.NewAsyncSender(tg, telegram.AsyncSenderConfig{
-		QueueSize: 1000,
-		Interval:  time.Second,
+		QueueSize: cfg.Telegram.QueueSize,
+		Interval:  cfg.Telegram.SendIntervalDuration(),
 	}, logger)
+
+	go tgSender.Run(appCtx)
+
 	api := httpapi.NewServer(cfg, tgSender, logger)
 
 	srv := &http.Server{
@@ -64,10 +71,13 @@ func main() {
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
 
+	slog.Info("tgn-relay shutting down")
+
+	appCancel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	slog.Info("tgn-relay shutting down")
 	if err := srv.Shutdown(ctx); err != nil {
 		slog.Error("shutdown failed", "error", err)
 		os.Exit(1)
