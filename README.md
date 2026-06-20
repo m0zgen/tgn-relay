@@ -263,8 +263,8 @@ sudo chmod 600 /etc/tgn-relay/tgnctl.conf
 Additional args:
 
 - `-H` - detect hostname and include it in message
-- `-D` - include current date and time in message
 - `-I` - include IP address of the host in message
+- `-D` - include current date and time in message
 - `-t` - add additional tags to message, e.g. `-t "#EU" -t "#TGNCTL"`
 
 ### Example usage
