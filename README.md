@@ -325,4 +325,5 @@ if succeeded port 53 type tcp protocol dns then exec "/usr/local/bin/tgnctl send
 ## Credits
 
 - [OpenBLD.net](https://openbld.net) team for inspiration and testing
+- [tgn-watch](https://github.com/m0zgen/tgn-watch) lightweight service watcher + HTTP/TCP/DNS/systemd checks + tgn-relay notifications
 - Go standard library and open-source ecosystem for making this possible
