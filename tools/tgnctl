@@ -26,6 +26,7 @@ done
 TGN_RELAY_URL="${TGN_RELAY_URL:-http://127.0.0.1:8080}"
 TGN_RELAY_KEY="${TGN_RELAY_KEY:-}"
 TGN_PARSE_MODE="${TGN_PARSE_MODE:-HTML}"
+TGN_TAGS="${TGN_TAGS:-}"
 
 if [[ -f "$CONFIG_FILE" ]]; then
   # shellcheck disable=SC1090
@@ -59,6 +60,16 @@ die() {
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
+}
+
+append_tags() {
+  local text="$1"
+
+  if [[ -n "${TGN_TAGS:-}" ]]; then
+    text="${text}"$'\n\n'"${TGN_TAGS}"
+  fi
+
+  echo "$text"
 }
 
 send_message() {
@@ -219,6 +230,7 @@ case "$cmd" in
         text="${text}"$'\n\n'"${meta}"
     fi
 
+    text="$(append_tags "$text")"
     send_message "$group" "$TGN_PARSE_MODE" "$text"
     ;;
 
@@ -287,6 +299,7 @@ case "$cmd" in
         text="${text}"$'\n\n'"${meta}"
     fi
 
+    text="$(append_tags "$text")"
     send_message "$group" "HTML" "$text"
     ;;
 esac
