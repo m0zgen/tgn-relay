@@ -298,6 +298,12 @@ Example - generic message with metadata:
 tgnctl send -H -I -D monitoring "🟢🚀 DNS  is UP again."
 ```
 
+Monit example:
+```bash
+# If OK)
+if succeeded port 53 type tcp protocol dns then exec "/usr/local/bin/tgnctl send-html -H -I -D monitoring '<b>🟢🚀 DNS 53 (proc) is UP again</b>.'"
+```
+
 Additional args:
 
 - `-H` - detect hostname and include it in message
