@@ -6,47 +6,38 @@ set -euo pipefail
 
 CONFIG_FILE="${TGNCTL_CONFIG:-/etc/tgn-relay/tgnctl.conf}"
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    -c|--config)
-      [[ $# -ge 2 ]] || {
-        echo "tgnctl: missing config path after $1" >&2
-        exit 2
-      }
-      CONFIG_FILE="$2"
-      shift 2
-      ;;
-    *)
-      break
-      ;;
-  esac
-done
-
-# Defaults
-TGN_RELAY_URL="${TGN_RELAY_URL:-http://127.0.0.1:8080}"
-TGN_RELAY_KEY="${TGN_RELAY_KEY:-}"
-TGN_PARSE_MODE="${TGN_PARSE_MODE:-HTML}"
-TGN_TAGS="${TGN_TAGS:-}"
-
-if [[ -f "$CONFIG_FILE" ]]; then
-  # shellcheck disable=SC1090
-  source "$CONFIG_FILE"
-fi
-
 usage() {
   cat <<EOF
 Usage:
-  tgnctl send <group> <text>
-  tgnctl send-html <group> <html-text>
+  tgnctl [global options] send [options] <group> <text>
+  tgnctl [global options] send-html [options] <group> <html-text>
+
+Global options:
+  -c, --config <file>   Use custom config file
+  -h, --help            Show help
+
+Send options:
+  -H, --host            Append current hostname
+  -I, --ip              Append current host IP
+  -D, --date            Append current date/time
+  -t, --tag <tag>       Append extra tag, can be used multiple times
 
 Examples:
   tgnctl send monitoring "nginx stopped on ada.openbld.net"
+
+  tgnctl send -H -I -D monitoring "nginx stopped"
+
   tgnctl send-html monitoring "<b>🚨 Service stopped</b>"
+
+  tgnctl send-html -H -I -D -t "#DNS" monitoring "<b>🚨 Service stopped</b>"
+
+  tgnctl -c ./tgnctl.conf send-html -H -I -D -t "#DNS" monitoring "<b>🚨 Service stopped</b>\\n\\n<b>Service:</b> <code>zbld</code>"
 
 Environment / config:
   TGN_RELAY_URL   default: http://127.0.0.1:8080
   TGN_RELAY_KEY   relay secret key
   TGN_PARSE_MODE  default: HTML
+  TGN_TAGS        additional tags to append to messages, e.g. "#EU #TGNCTL"
 
 Config file:
   /etc/tgn-relay/tgnctl.conf
@@ -62,14 +53,118 @@ need_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
 }
 
+# ---------------- Global args ----------------
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -c|--config)
+      [[ $# -ge 2 ]] || die "missing config path after $1"
+      CONFIG_FILE="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      die "unknown global option: $1"
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+# ---------------- Defaults / config ----------------
+
+TGN_RELAY_URL="${TGN_RELAY_URL:-http://127.0.0.1:8080}"
+TGN_RELAY_KEY="${TGN_RELAY_KEY:-}"
+TGN_PARSE_MODE="${TGN_PARSE_MODE:-HTML}"
+TGN_TAGS="${TGN_TAGS:-}"
+
+if [[ -f "$CONFIG_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$CONFIG_FILE"
+fi
+
+# ---------------- Helpers ----------------
+
 append_tags() {
   local text="$1"
+  local extra_tags="${2:-}"
+  local tags=""
 
-  if [[ -n "${TGN_TAGS:-}" ]]; then
-    text="${text}"$'\n\n'"${TGN_TAGS}"
+  tags="${TGN_TAGS:-}"
+
+  if [[ -n "$extra_tags" ]]; then
+    tags="${tags:+$tags }$extra_tags"
   fi
 
-  echo "$text"
+  if [[ -n "$tags" ]]; then
+    text="${text}"$'\n\n'"${tags}"
+  fi
+
+  printf '%s\n' "$text"
+}
+
+decode_escapes() {
+  local s="$1"
+
+  # literal \n -> real newline
+  s="${s//\\n/$'\n'}"
+
+  # literal \t -> real tab
+  s="${s//\\t/$'\t'}"
+
+  printf '%s\n' "$s"
+}
+
+detect_host() {
+  local h=""
+
+  h="$(hostname -f 2>/dev/null || true)"
+
+  if [[ -z "$h" || "$h" == "localhost" || "$h" == "localhost.localdomain" ]]; then
+    h="$(hostname 2>/dev/null || true)"
+  fi
+
+  if [[ -z "$h" || "$h" == "localhost" || "$h" == "localhost.localdomain" ]]; then
+    h="$(cat /etc/hostname 2>/dev/null || true)"
+  fi
+
+  if [[ -z "$h" || "$h" == "localhost" || "$h" == "localhost.localdomain" ]]; then
+    h="unknown"
+  fi
+
+  printf '%s\n' "$h"
+}
+
+detect_host_ip() {
+  local ipaddr=""
+
+  if command -v ip >/dev/null 2>&1; then
+    ipaddr="$(
+      ip route get 1.1.1.1 2>/dev/null \
+        | awk '{for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}'
+    )"
+  fi
+
+  if [[ -z "$ipaddr" ]] && command -v hostname >/dev/null 2>&1; then
+    ipaddr="$(
+      hostname -I 2>/dev/null \
+        | awk '{print $1}'
+    )"
+  fi
+
+  if [[ -z "$ipaddr" ]]; then
+    ipaddr="unknown"
+  fi
+
+  printf '%s\n' "$ipaddr"
 }
 
 send_message() {
@@ -79,7 +174,8 @@ send_message() {
 
   [[ -n "$group" ]] || die "group is empty"
   [[ -n "$text" ]] || die "text is empty"
-  [[ -n "$TGN_RELAY_KEY" ]] || die "TGN_RELAY_KEY is empty"
+  [[ -n "${TGN_RELAY_URL:-}" ]] || die "TGN_RELAY_URL is empty"
+  [[ -n "${TGN_RELAY_KEY:-}" ]] || die "TGN_RELAY_KEY is empty"
 
   need_cmd curl
   need_cmd jq
@@ -105,62 +201,65 @@ send_message() {
   echo "sent"
 }
 
-# Host detectors
-detect_host() {
-  local h=""
+build_plain_meta() {
+  local add_host="$1"
+  local add_ip="$2"
+  local add_date="$3"
+  local meta=""
 
-  h="$(hostname -f 2>/dev/null || true)"
-
-  if [[ -z "$h" || "$h" == "localhost" || "$h" == "localhost.localdomain" ]]; then
-    h="$(hostname 2>/dev/null || true)"
+  if [[ "$add_host" -eq 1 ]]; then
+    meta+="Host: $(detect_host)"
   fi
 
-  if [[ -z "$h" || "$h" == "localhost" || "$h" == "localhost.localdomain" ]]; then
-    h="$(cat /etc/hostname 2>/dev/null || true)"
+  if [[ "$add_ip" -eq 1 ]]; then
+    [[ -n "$meta" ]] && meta+=$'\n'
+    meta+="Host IP: $(detect_host_ip)"
   fi
 
-  if [[ -z "$h" ]]; then
-    h="unknown"
+  if [[ "$add_date" -eq 1 ]]; then
+    [[ -n "$meta" ]] && meta+=$'\n'
+    meta+="Date: $(date '+%Y-%m-%d %H:%M:%S %z')"
   fi
 
-  echo "$h"
+  printf '%s\n' "$meta"
 }
 
-detect_host_ip() {
-  local ipaddr=""
+build_html_meta() {
+  local add_host="$1"
+  local add_ip="$2"
+  local add_date="$3"
+  local meta=""
 
-  if command -v ip >/dev/null 2>&1; then
-    ipaddr="$(
-      ip route get 1.1.1.1 2>/dev/null \
-        | awk '{for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}'
-    )"
+  if [[ "$add_host" -eq 1 ]]; then
+    meta+="<b>Host:</b> <code>$(detect_host)</code>"
   fi
 
-  if [[ -z "$ipaddr" ]]; then
-    ipaddr="$(
-      hostname -I 2>/dev/null \
-        | awk '{print $1}'
-    )"
+  if [[ "$add_ip" -eq 1 ]]; then
+    [[ -n "$meta" ]] && meta+=$'\n'
+    meta+="<b>Host IP:</b> <code>$(detect_host_ip)</code>"
   fi
 
-  if [[ -z "$ipaddr" ]]; then
-    ipaddr="unknown"
+  if [[ "$add_date" -eq 1 ]]; then
+    [[ -n "$meta" ]] && meta+=$'\n'
+    meta+="<b>Date:</b> <code>$(date '+%Y-%m-%d %H:%M:%S %z')</code>"
   fi
 
-  echo "$ipaddr"
+  printf '%s\n' "$meta"
 }
 
-decode_escapes() {
-  local s="$1"
-
-  # literal \n -> real newline
-  s="${s//\\n/$'\n'}"
-
-  # optional: literal \t -> real tab
-  s="${s//\\t/$'\t'}"
-
-  echo "$s"
+parse_send_options() {
+  # Outputs shell assignments:
+  # add_host=...
+  # add_ip=...
+  # add_date=...
+  # extra_tags=...
+  #
+  # This helper is intentionally not used via eval with arbitrary user input.
+  # Keeping parsing duplicated inside commands is safer/simple for this script.
+  :
 }
+
+# ---------------- Commands ----------------
 
 cmd="${1:-}"
 
@@ -171,37 +270,47 @@ case "$cmd" in
     add_host=0
     add_date=0
     add_ip=0
+    extra_tags=""
 
     while [[ $# -gt 0 ]]; do
-        case "$1" in
+      case "$1" in
         -H|--host|--with-host)
-            add_host=1
-            shift
-            ;;
+          add_host=1
+          shift
+          ;;
         -D|--date|--with-date)
-            add_date=1
-            shift
-            ;;
+          add_date=1
+          shift
+          ;;
         -I|--ip|--host-ip|--with-ip)
-            add_ip=1
-            shift
-            ;;
+          add_ip=1
+          shift
+          ;;
+        -t|--tag)
+          [[ $# -ge 2 ]] || die "missing tag after $1"
+          extra_tags+="${extra_tags:+ }$2"
+          shift 2
+          ;;
+        -h|--help)
+          usage
+          exit 0
+          ;;
         --)
-            shift
-            break
-            ;;
+          shift
+          break
+          ;;
         -*)
-            die "unknown option for send: $1"
-            ;;
+          die "unknown option for send: $1"
+          ;;
         *)
-            break
-            ;;
-        esac
+          break
+          ;;
+      esac
     done
 
     [[ $# -ge 2 ]] || {
-        usage
-        exit 2
+      usage
+      exit 2
     }
 
     group="$1"
@@ -211,26 +320,12 @@ case "$cmd" in
     text="$(decode_escapes "$text")"
 
     if [[ "$add_host" -eq 1 || "$add_date" -eq 1 || "$add_ip" -eq 1 ]]; then
-        meta=""
-
-        if [[ "$add_host" -eq 1 ]]; then
-        meta+="Host: $(detect_host)"
-        fi
-
-        if [[ "$add_ip" -eq 1 ]]; then
-        [[ -n "$meta" ]] && meta+=$'\n'
-        meta+="Host IP: $(detect_host_ip)"
-        fi
-
-        if [[ "$add_date" -eq 1 ]]; then
-        [[ -n "$meta" ]] && meta+=$'\n'
-        meta+="Date: $(date '+%Y-%m-%d %H:%M:%S %z')"
-        fi
-
-        text="${text}"$'\n\n'"${meta}"
+      meta="$(build_plain_meta "$add_host" "$add_ip" "$add_date")"
+      text="${text}"$'\n\n'"${meta}"
     fi
 
-    text="$(append_tags "$text")"
+    text="$(append_tags "$text" "$extra_tags")"
+
     send_message "$group" "$TGN_PARSE_MODE" "$text"
     ;;
 
@@ -240,37 +335,47 @@ case "$cmd" in
     add_host=0
     add_date=0
     add_ip=0
+    extra_tags=""
 
     while [[ $# -gt 0 ]]; do
-        case "$1" in
+      case "$1" in
         -H|--host|--with-host)
-            add_host=1
-            shift
-            ;;
+          add_host=1
+          shift
+          ;;
         -D|--date|--with-date)
-            add_date=1
-            shift
-            ;;
+          add_date=1
+          shift
+          ;;
         -I|--ip|--host-ip|--with-ip)
-            add_ip=1
-            shift
-            ;;
+          add_ip=1
+          shift
+          ;;
+        -t|--tag)
+          [[ $# -ge 2 ]] || die "missing tag after $1"
+          extra_tags+="${extra_tags:+ }$2"
+          shift 2
+          ;;
+        -h|--help)
+          usage
+          exit 0
+          ;;
         --)
-            shift
-            break
-            ;;
+          shift
+          break
+          ;;
         -*)
-            die "unknown option for send-html: $1"
-            ;;
+          die "unknown option for send-html: $1"
+          ;;
         *)
-            break
-            ;;
-        esac
+          break
+          ;;
+      esac
     done
 
     [[ $# -ge 2 ]] || {
-        usage
-        exit 2
+      usage
+      exit 2
     }
 
     group="$1"
@@ -280,26 +385,21 @@ case "$cmd" in
     text="$(decode_escapes "$text")"
 
     if [[ "$add_host" -eq 1 || "$add_date" -eq 1 || "$add_ip" -eq 1 ]]; then
-        meta=""
-
-        if [[ "$add_host" -eq 1 ]]; then
-        meta+="<b>Host:</b> <code>$(detect_host)</code>"
-        fi
-
-        if [[ "$add_ip" -eq 1 ]]; then
-        [[ -n "$meta" ]] && meta+=$'\n'
-        meta+="<b>Host IP:</b> <code>$(detect_host_ip)</code>"
-        fi
-
-        if [[ "$add_date" -eq 1 ]]; then
-        [[ -n "$meta" ]] && meta+=$'\n'
-        meta+="<b>Date:</b> <code>$(date '+%Y-%m-%d %H:%M:%S %z')</code>"
-        fi
-
-        text="${text}"$'\n\n'"${meta}"
+      meta="$(build_html_meta "$add_host" "$add_ip" "$add_date")"
+      text="${text}"$'\n\n'"${meta}"
     fi
 
-    text="$(append_tags "$text")"
+    text="$(append_tags "$text" "$extra_tags")"
+
     send_message "$group" "HTML" "$text"
+    ;;
+
+  -h|--help|help|"")
+    usage
+    exit 0
+    ;;
+
+  *)
+    die "unknown command: $cmd"
     ;;
 esac

@@ -239,17 +239,49 @@ Example:
 
 `tgnctl` is a small command-line tool for sending messages through `tgn-relay`.
 
+Installation:
+
+```bash
+sudo install -m 0755 tgnctl /usr/local/bin/tgnctl
+```
+
 Example config:
 
 ```bash
-cat > ./tgnctl.conf <<'EOF'
+sudo mkdir -p /etc/tgn-relay
+
+sudo tee /etc/tgn-relay/tgnctl.conf >/dev/null <<'EOF'
 TGN_RELAY_URL="http://127.0.0.1:8080"
 TGN_RELAY_KEY="super-secret-key"
 TGN_PARSE_MODE="HTML"
+TGN_TAGS="#TGNCTL #MONITORING"
 EOF
+
+sudo chmod 600 /etc/tgn-relay/tgnctl.conf
 ```
 
-Testing:
+Additional args:
+
+- `-H` - detect hostname and include it in message
+- `-D` - include current date and time in message
+- `-I` - include IP address of the host in message
+- `-t` - add additional tags to message, e.g. `-t "#EU" -t "#TGNCTL"`
+
+### Example usage
+
+Just run `tgnctl send <group> <message>`:
+
+```bash
+tgnctl send monitoring "✅ plain test"
+
+tgnctl send -H -I -D monitoring "✅ plain test with meta"
+
+tgnctl send-html -H -I -D monitoring "<b>✅ HTML test</b>\n\n<b>Service:</b> <code>nginx</code>"
+
+tgnctl send-html -H -I -D -t "#DNS" -t "#UP" monitoring "<b>🟢 DNS is UP</b>\n\n<b>Port:</b> <code>53</code>"
+```
+
+Usage with custom config:
 
 ```bash
 TGNCTL_CONFIG=./tgnctl.conf ./tgnctl send monitoring "✅ hello from tgnctl"
@@ -267,11 +299,7 @@ or:
 ./tgnctl -c ./tgnctl.conf send monitoring "✅ test"
 ```
 
-Installation:
-
-```bash
-sudo install -m 0755 tgnctl /usr/local/bin/tgnctl
-```
+### Systemd integration
 
 Use it in systemd unit for OnFailure alerting:
 
@@ -286,29 +314,13 @@ Test it (example):
 sudo systemctl start 'tgn-notify@nginx.service'
 ```
 
-Example - HTML with metadata:
-
-```bash
-tgnctl send-html -H -I -D monitoring "<b>🟢🚀 DNS is UP again.</b>"
-```
-
-Example - generic message with metadata:
-
-```bash
-tgnctl send -H -I -D monitoring "🟢🚀 DNS  is UP again."
-```
+### Monit integration
 
 Monit example:
 ```bash
 # If OK)
 if succeeded port 53 type tcp protocol dns then exec "/usr/local/bin/tgnctl send-html -H -I -D monitoring '<b>🟢🚀 DNS 53 (proc) is UP again</b>.'"
 ```
-
-Additional args:
-
-- `-H` - detect hostname and include it in message
-- `-D` - include current date and time in message
-- `-I` - include IP address of the host in message
 
 ## Credits
 
