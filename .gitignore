@@ -1,7 +1,9 @@
 bin/
 dist/
 config.yml
+config-local.yml
 tgnctl.conf
+tgnctl-local.conf
 test-queue.sh
 *.log
 .DS_Store
