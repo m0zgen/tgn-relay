@@ -239,6 +239,8 @@ Example:
 
 `tgnctl` is a small command-line tool for sending messages through `tgn-relay`.
 
+Working pipeline: `tgnctl` -> `tgn-relay` -> Telegram.
+
 Installation:
 
 ```bash
